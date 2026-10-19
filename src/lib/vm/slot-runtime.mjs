@@ -26,14 +26,19 @@ import { isLocalEgressProxy } from './egress.mjs'
 import { vmNodeId } from '../cluster/placement.mjs'
 import { hostProxyUrlForVm, slotHost } from './slot-host.mjs'
 
+import { ensureVmBrowser, stopVmBrowser } from './browser-runtime.mjs'
+
 export { runtimeKind }
 
 function unsupportedOnHost(action) {
   return { ok: false, code: 'remote_unsupported', error: `集群节点上的槽位不支持：${action}` }
 }
 
-export function startSlot(vm, projectRoot, opts = {}) {
-  return slotHost(vm).start(vm, projectRoot, opts)
+export async function startSlot(vm, projectRoot, opts = {}) {
+  const boot = await slotHost(vm).start(vm, projectRoot, opts)
+  if (!boot?.ok) return boot
+  const browser = await ensureVmBrowser(vm, projectRoot, { start: true })
+  return { ...boot, browser }
 }
 
 /**
@@ -62,18 +67,25 @@ export async function startSlotReady(vm, projectRoot, opts = {}) {
 }
 
 export async function stopSlot(vm) {
+  const browser = await stopVmBrowser(vm, { projectRoot: process.env.KIN_PROJECT_ROOT || undefined })
+  if (!browser.ok) return browser
   if (isCodexVm(vm)) stopCodexKernel(vm.id)
   return slotHost(vm).stop(vm)
 }
 
 /** Destroy the slot container. Used only by explicit reset / delete. */
 export async function destroySlot(vm) {
+  const browser = await stopVmBrowser(vm, { remove: true, projectRoot: process.env.KIN_PROJECT_ROOT || undefined })
+  if (!browser.ok) return browser
   return slotHost(vm).destroy(vm)
 }
 
 /** Reload guest worker so a new bind-mounted / virtiofs binary is picked up. Recreate only when the bound egress network moved; otherwise never docker rm. */
 export async function reloadSlot(vm, projectRoot, opts = {}) {
-  return slotHost(vm).reload(vm, projectRoot, opts)
+  const boot = await slotHost(vm).reload(vm, projectRoot, opts)
+  if (!boot?.ok) return boot
+  const browser = await ensureVmBrowser(vm, projectRoot, { start: true })
+  return { ...boot, browser }
 }
 
 export async function reloadSlotReady(vm, projectRoot, opts = {}) {

@@ -32,6 +32,7 @@ const KEEP_HOME = [
   'codex-credentials.json',
   'machine-id',
   'kvm/fingerprint',
+  'browser',
 ]
 
 function copyKept(src, dest) {
@@ -41,7 +42,7 @@ function copyKept(src, dest) {
     return
   }
   if (st.isDirectory()) {
-    fs.cpSync(src, dest, { recursive: true })
+    fs.cpSync(src, dest, { recursive: true, filter: (source) => !fs.lstatSync(source).isSocket() })
     return
   }
   fs.copyFileSync(src, dest)

@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardQueryOptions } from '@/features/overview/queries'
+import { BrowserAuthButton } from '@/features/vm/browser-card'
 import { CodexCredentialPanel } from '@/features/vm/codex-credential-panel'
 import { ConvertOauthToSetupButton } from '@/features/vm/convert-oauth-button'
 import { vmQueryOptions } from '@/features/vm/queries'
@@ -406,6 +407,11 @@ function ClaudeCredentialPanel({
       ) : linkReady ? (
         <div className='space-y-2'>
           <div className='flex flex-wrap items-center gap-2'>
+            <BrowserAuthButton
+              vmId={vmId}
+              authUrl={link.authUrl}
+              disabled={busy || !!vm.node_id}
+            />
             <Button
               size='sm'
               variant='outline'
@@ -425,7 +431,7 @@ function ClaudeCredentialPanel({
               target='_blank'
               rel='noreferrer'
             >
-              打开授权页
+              在本机打开授权页
               <ExternalLink className='size-3' aria-hidden='true' />
             </a>
           </div>

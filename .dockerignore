@@ -25,3 +25,7 @@ worker/bin
 *.md
 !README.md
 !CHANGELOG.md
+
+chromium-vm
+
+!web/dist

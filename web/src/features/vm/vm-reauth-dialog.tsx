@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { Vm } from '@/types/panel-vm'
 import { toast } from 'sonner'
+import { isCodexVm } from '@/lib/vm-kind'
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SlotIdentity } from '@/components/platform-chip'
+import { BrowserCard } from '@/features/vm/browser-card'
 import { CredentialPanel } from '@/features/vm/credential-panel'
 import { vmQueryOptions, vmsListQueryOptions } from '@/features/vm/queries'
 
@@ -33,7 +35,8 @@ export function VmReauthDialog({
             生成授权链接换取新凭证，写入后覆盖当前槽位的令牌。
           </DialogDescription>
         </DialogHeader>
-        <div className='-me-3 min-h-0 flex-1 overflow-y-auto pe-3'>
+        <div className='-me-3 min-h-0 flex-1 space-y-3 overflow-y-auto pe-3'>
+          {vm && !isCodexVm(vm) ? <BrowserCard vmId={vm.id} /> : null}
           {vm ? (
             <CredentialPanel
               key={vm.id}
@@ -41,7 +44,7 @@ export function VmReauthDialog({
               showConvert={false}
               onCommitted={async (_data, vmId, what) => {
                 toast.success(what)
-                onOpenChange(false)
+                if (vm && isCodexVm(vm)) onOpenChange(false)
                 await Promise.all([
                   qc.invalidateQueries({
                     queryKey: vmQueryOptions(vmId).queryKey,

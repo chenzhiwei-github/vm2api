@@ -1,21 +1,26 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Vm } from '@/types/panel-vm'
 import {
   BarChart3,
   Download,
+  Globe,
   LifeBuoy,
   Link2,
   MoreHorizontal,
   Play,
   RefreshCw,
   RotateCcw,
+  Square,
   Trash2,
   Undo2,
   UserRoundPlus,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { api } from '@/lib/api'
 import { canRefreshCredential, credTypeOf } from '@/lib/cred-type'
 import { cn } from '@/lib/utils'
+import { isCodexVm } from '@/lib/vm-kind'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -25,6 +30,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { meQueryOptions } from '@/features/auth/queries'
+import {
+  browserQueryOptions,
+  browserUrl,
+  placeholderWindow,
+  type BrowserState,
+} from '@/features/vm/browser-state'
 import { restrictionTitle } from '@/features/vm/clear-restriction'
 import { useVmActions } from '@/features/vm/vm-actions-context'
 import { canReclaimVm } from '@/features/vm/vm-owner'
@@ -57,6 +68,52 @@ export function VmActionMenu({
   const restricted = restrictionTitle(vm)
   const admin = me.data?.role === 'admin'
   const perms = useVmPerms()
+  const qc = useQueryClient()
+  const canBrowser = perms.credential && !isCodexVm(vm)
+  const browserOptions = browserQueryOptions(vm.id, canBrowser)
+  const browser = useQuery(browserOptions)
+  const browserRunning = browser.data?.status === 'running'
+  const browserUnavailable =
+    !browser.data ||
+    browser.isError ||
+    browser.data.status === 'disabled' ||
+    browser.data.status === 'unsupported'
+  const browserAction = useMutation({
+    mutationFn: async ({
+      stop,
+      popup,
+    }: {
+      stop: boolean
+      popup?: Window | null
+    }) => {
+      try {
+        const result = await api<BrowserState>(
+          `/api/panel/vms/${encodeURIComponent(vm.id)}/browser/${stop ? 'stop' : 'start'}`,
+          { method: 'POST', body: '{}' }
+        )
+        if (!stop) {
+          if (!result.view_path) throw new Error('配套浏览器未启用')
+          if (popup) popup.location.href = browserUrl(result.view_path)
+          else
+            toast.error('Chromium 已开启，新窗口被拦截，可从账号详情打开浏览器')
+        }
+        return result
+      } catch (error) {
+        popup?.close()
+        throw error
+      }
+    },
+    onSuccess: (result, { stop }) => {
+      if (stop) {
+        qc.setQueryData(browserOptions.queryKey, (current) =>
+          current ? { ...current, status: 'stopped' as const } : current
+        )
+      } else qc.setQueryData(browserOptions.queryKey, result)
+      void qc.invalidateQueries({ queryKey: browserOptions.queryKey })
+      if (stop) toast.success('Chromium 已关闭，登录数据已保留')
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
   return (
     <>
       <DropdownMenu>
@@ -101,6 +158,24 @@ export function VmActionMenu({
                 刷新令牌
               </DropdownMenuItem>
             </>
+          ) : null}
+          {canBrowser ? (
+            <DropdownMenuItem
+              disabled={browserUnavailable || browserAction.isPending}
+              onSelect={() =>
+                browserAction.mutate({
+                  stop: browserRunning,
+                  popup: browserRunning ? undefined : placeholderWindow(),
+                })
+              }
+            >
+              {browserRunning ? <Square /> : <Globe />}
+              {browserAction.isPending
+                ? 'Chromium 操作中…'
+                : browserRunning
+                  ? '关闭 Chromium'
+                  : '开启 Chromium'}
+            </DropdownMenuItem>
           ) : null}
           {admin ? (
             <DropdownMenuItem onSelect={() => setPackOpen(true)}>

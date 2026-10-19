@@ -23,6 +23,7 @@ import {
 import { vmTotalCost, vmTotalTokens } from '@/lib/vm-usage'
 import { StatusMark } from '@/components/status-mark'
 import { ProxyChip } from '@/features/proxies/proxy-chip'
+import { BrowserStatus } from '@/features/vm/browser-status'
 import { runtimeTypeLabel, runtimeTypeOf } from '@/features/vm/machine-spec'
 import {
   SchedulableSwitch,
@@ -437,11 +438,14 @@ export const VmBlade = memo(function VmBlade({
             </span>
           ) : null}
         </span>
-        <TierBadge vm={vm} />
+        <TierBadge vm={vm} className='justify-self-end' />
+        <div className='col-start-2 row-start-2 justify-self-end text-muted-foreground'>
+          <BrowserStatus vm={vm} />
+        </div>
         <span
           title={email || undefined}
           className={cn(
-            'col-span-2 truncate font-semibold tracking-[-0.012em]',
+            'col-start-1 row-start-2 truncate font-semibold tracking-[-0.012em]',
             large ? 'text-sm' : 'text-[13px]',
             email
               ? state === 'dead'

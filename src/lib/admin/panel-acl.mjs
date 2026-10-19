@@ -169,6 +169,8 @@ function userVmPathAllowed(method, path) {
     if (!rest) return true
     if (rest === 'oauth/credential' || rest === 'package') return false
     return (
+      rest === 'browser' ||
+      rest.startsWith('browser/view/') ||
       rest === 'test-schedule' ||
       rest.startsWith('oauth/') ||
       rest === 'probe' ||
@@ -184,6 +186,10 @@ function userVmPathAllowed(method, path) {
     if (head === 'official-cc-bootstrap' || head === 'wrap-cli' || head === 'reset-fingerprint') return false
     if (head === 'owner') return false
     return (
+      rest === 'browser/start' ||
+      rest === 'browser/stop' ||
+      rest === 'browser/open' ||
+      rest.startsWith('browser/view/') ||
       rest === 'schedulable' ||
       rest === 'cooldown/clear' ||
       rest === 'circuit/reset' ||

@@ -73,3 +73,7 @@ patches/
 .omp
 /dist/
 share/wrap-cli/dist/
+
+# Local browser profiles and deployment secrets
+/chromium-vm/
+.DS_Store

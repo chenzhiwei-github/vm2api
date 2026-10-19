@@ -1,3 +1,4 @@
+import { createBrowserGateway } from './lib/vm/browser-gateway.mjs'
 /**
  * vm2api — Node control plane.
  * Inference data plane: one long-lived Go slot worker per VM
@@ -932,6 +933,7 @@ if (proxyPool.snapshot().config.ipv6_enabled !== true) {
 }
 const clusterRoutes = createClusterRoutes({ manager: clusterManager, json, readBody, ok: panel.ok })
 const slotShell = createSlotShell({ projectRoot: cfg.paths.project })
+const browserGateway = createBrowserGateway({ projectRoot: cfg.paths.project, requireAuth, json })
 for (const vm of listVms(cfg.paths.project)) {
   if (isCodexVm(vm)) continue
   try {
@@ -946,6 +948,7 @@ cliNodeGuard = createCliNodeGuard({
 })
 
 const handlePanel = createPanelHandler({
+  browserGateway,
   json,
   writeSSEHeaders,
   readBody,
@@ -1184,6 +1187,7 @@ const server = http.createServer(async (req, res) => {
 })
 
 server.on('upgrade', (req, socket, head) => {
+  if (browserGateway.handleUpgrade(req, socket, head)) return
   if (responsesWs.handleUpgrade(req, socket, head)) return
   if (clusterRoutes.handleUpgrade(req, socket, head)) return
   if (!slotShell.handleUpgrade(req, socket, head)) socket.destroy()

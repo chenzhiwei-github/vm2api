@@ -82,6 +82,7 @@ type CreateVmResponse = {
   id?: string
   vm_id?: string
   vm?: { id?: string }
+  browser_error?: string
   start_error?: string
   /** 指定出口在创建瞬间没绑上（被别处占满等）。 */
   proxy_error?: string
@@ -111,7 +112,12 @@ const MEMORY_SHORT: Record<VmMemoryOption, string> = {
   '16g': '16G',
 }
 
-type CreateVmResult = { id: string; startError: string; proxyError: string }
+type CreateVmResult = {
+  id: string
+  startError: string
+  proxyError: string
+  browserError: string
+}
 
 /** 创建表单的草稿：表单与规格单读同一份。 */
 export interface CreateVmDraft {
@@ -235,10 +241,13 @@ export function useCreateVmDraft({
       return {
         id: data.id || data.vm_id || data.vm?.id || id || '',
         startError: data.start_error || '',
+        browserError: data.browser_error || '',
         proxyError: data.proxy_error || '',
       }
     },
     onSuccess: async (created) => {
+      if (created.browserError)
+        toast.warning(`VM 已创建，浏览器未就绪：${created.browserError}`)
       if (created.proxyError) {
         toast.warning(`出口未绑定：${created.proxyError}`)
       }

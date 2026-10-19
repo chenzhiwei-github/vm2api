@@ -1,3 +1,4 @@
+import { stopBrowserBeforeProxyChange } from './browser-runtime.mjs'
 /**
  * Multi-VM registry — load all vms/*.json (except active.json)
  * Writes go through atomicWriteJson so the DB credential mirror
@@ -572,7 +573,8 @@ export function bindVmProxy(projectRoot, id, proxyInfo) {
   const file = path.join(projectRoot, 'vms', `${id}.json`)
   if (!fs.existsSync(file)) return null
   const vm = JSON.parse(fs.readFileSync(file, 'utf8'))
-  vm.proxy = proxyInfo
+  const previousProxy = vm.proxy
+  const nextProxy = proxyInfo
     ? {
         id: proxyInfo.id,
         host: proxyInfo.host,
@@ -583,6 +585,8 @@ export function bindVmProxy(projectRoot, id, proxyInfo) {
         password: proxyInfo.password == null ? null : proxyInfo.password,
       }
     : null
+  if (JSON.stringify(previousProxy || null) !== JSON.stringify(nextProxy)) stopBrowserBeforeProxyChange(vm, projectRoot)
+  vm.proxy = nextProxy
   // Eligibility (`slotHasBoundProxy`) and CLI egress both require this flag.
   // It is not an operator toggle — it follows whether an exit is bound.
   vm.proxy_cli_enabled = hasBoundExit(vm.proxy)

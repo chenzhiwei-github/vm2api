@@ -23,6 +23,7 @@ import {
 import { StatusMark } from '@/components/status-mark'
 import { AllowedModelsCard } from '@/features/vm/allowed-models-card'
 import { AuthSchemeEditor } from '@/features/vm/auth-scheme-editor'
+import { BrowserCard } from '@/features/vm/browser-card'
 import { CodexCredentialPanel } from '@/features/vm/codex-credential-panel'
 import { ConvertOauthToSetupButton } from '@/features/vm/convert-oauth-button'
 import { CredentialEditorButton } from '@/features/vm/credential-editor'
@@ -137,6 +138,7 @@ export function VmAccountTab(props: VmAccountTabProps) {
         ) : null}
 
         <div className='space-y-3'>
+          {perms.credential && !gpt ? <BrowserCard vmId={id} /> : null}
           <Card>
             <CardHeader className='pb-2'>
               <CardTitle className='text-sm'>账号</CardTitle>

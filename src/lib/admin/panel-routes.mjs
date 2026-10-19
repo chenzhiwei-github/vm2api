@@ -1,3 +1,11 @@
+import {
+  ensureBrowserIdentity,
+  ensureVmBrowser,
+  readVmBrowser,
+  openVmBrowserAuth,
+  stopVmBrowser,
+  waitVmBrowserReady,
+} from '../vm/browser-runtime.mjs'
 /**
  * /admin and /api/panel routes. Login / logout / me and { ok, data }
  * envelopes are unchanged; slot start/reload go through startSlotReady.
@@ -1353,6 +1361,38 @@ export function createPanelHandler(ctx) {
         denyIfUserMissesProxy(req, res, { proxyPool, json, path: p })
       ) {
         return true
+      }
+      if (/^\/api\/panel\/vms\/[^/]+\/browser\/view\//.test(p)) {
+        return ctx.browserGateway ? await ctx.browserGateway.handleHttp(req, res) : false
+      }
+      if (/^\/api\/panel\/vms\/[^/]+\/browser(?:\/(?:start|stop|open))?$/.test(p)) {
+        const id = p.split('/')[4]
+        const vm = getVm(cfg.paths.project, id)
+        if (!vm) return json(res, 404, { ok: false, error: { message: 'vm not found' } })
+        const action = p.split('/')[6] || ''
+        let result
+        if (req.method === 'GET' && !action) result = await readVmBrowser(vm, cfg.paths.project)
+        else if (req.method === 'POST' && action === 'start')
+          result = await ensureVmBrowser(vm, cfg.paths.project, { start: true })
+        else if (req.method === 'POST' && action === 'stop')
+          result = await stopVmBrowser(vm, { projectRoot: cfg.paths.project })
+        else if (req.method === 'POST' && action === 'open') {
+          const body = await readBody(req, 16 * 1024)
+          result = await openVmBrowserAuth(vm, cfg.paths.project, body.url)
+        } else return json(res, 405, { ok: false, error: { message: 'method not allowed' } })
+        if (!result.ok) return json(res, 409, { ok: false, error: { code: result.code, message: result.error } })
+        if (
+          req.method === 'POST' &&
+          (action === 'start' || action === 'open') &&
+          !result.skipped &&
+          !(await waitVmBrowserReady(vm, cfg.paths.project))
+        ) {
+          return json(res, 503, {
+            ok: false,
+            error: { code: 'browser_start_timeout', message: '浏览器仍在启动，请稍后重试' },
+          })
+        }
+        return json(res, 200, panel.ok(result))
       }
       if ((req.method === 'GET' || req.method === 'PUT') && p === '/api/panel/onboarding') {
         if (req.method === 'PUT') {
@@ -3260,14 +3300,19 @@ export function createPanelHandler(ctx) {
           if (vm) {
             const gone = await destroySlot(vm)
             // A node slot that could not be removed keeps running there with the account's credential.
-            if (!gone.ok && slotHost(vm).kind === 'node') {
+            if (!gone.ok) {
               return json(res, 409, {
                 ok: false,
                 error: { code: gone.code || 'remote_destroy_failed', message: gone.error || 'remote destroy failed' },
               })
             }
           }
-        } catch {}
+        } catch (error) {
+          return json(res, 409, {
+            ok: false,
+            error: { code: 'vm_destroy_failed', message: String(error.message || error) },
+          })
+        }
         // detach this VM only — do not unbind other slots sharing the SOCKS5
         try {
           proxyPool.unbindVm(id)
@@ -3488,6 +3533,7 @@ export function createPanelHandler(ctx) {
         vm.locale = generated.locale
         vm.fingerprint = applyGeneratedFingerprint({}, generated)
         vm.updated_at = generated.reset_at
+        if (!vm.node_id) ensureBrowserIdentity(vm, cfg.paths.project)
         atomicWriteJson(vmPath, vm, { mode: 0o600 })
         writeGuestMachineIdFile(cfg.paths.project, id, generated.guest_machine_id)
         applyOfficialFingerprintToVm(vmPath, path.join(cfg.paths.project, 'vms', id, 'cli-home'))
@@ -4118,6 +4164,7 @@ export function createPanelHandler(ctx) {
         } else if (startNow) {
           patchVmRecord(cfg.paths.project, id, { status: 'stopped' })
         }
+        const browser = await ensureVmBrowser(vm, cfg.paths.project, { start: startNow && hasExit(vm) })
         const saved = getVm(cfg.paths.project, id) || vm
         return json(
           res,
@@ -4129,6 +4176,8 @@ export function createPanelHandler(ctx) {
               role: ident.role,
               nodes: clusterNodesOf(ctx),
             }),
+            browser,
+            ...(browser.ok ? {} : { browser_error: browser.error }),
             ...(startError ? { start_error: startError } : {}),
             ...(proxyError ? { proxy_error: proxyError } : {}),
           }),
