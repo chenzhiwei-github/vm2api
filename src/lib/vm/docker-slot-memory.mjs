@@ -57,7 +57,12 @@ function dockerExec(vm, argv, execImpl, timeout) {
 
 export function inspectDockerContainerMemory(vm, execImpl = defaultExec) {
   const name = containerName(vm?.id)
-  const r = dockerExec(vm, ['docker', 'inspect', '-f', '{{.HostConfig.Memory}}', name], execImpl, 10_000)
+  const r = dockerExec(
+    vm,
+    ['docker', 'inspect', '-f', '{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}} {{.State.Running}}', name],
+    execImpl,
+    10_000,
+  )
   if (!r.ok) {
     return {
       ok: false,
@@ -65,11 +70,21 @@ export function inspectDockerContainerMemory(vm, execImpl = defaultExec) {
       message: (r.stderr || r.stdout || 'docker inspect failed').trim(),
     }
   }
-  const formatted = formatDockerMemoryBytes(String(r.stdout || '').trim())
-  if (!formatted) {
+  const [memoryValue, swapValue, runningValue] = String(r.stdout || '')
+    .trim()
+    .split(/\s+/)
+  const formatted = formatDockerMemoryBytes(memoryValue)
+  const swapBytes = Number(swapValue)
+  if (
+    !formatted ||
+    !Number.isSafeInteger(Number(memoryValue)) ||
+    !Number.isSafeInteger(swapBytes) ||
+    swapBytes < -1 ||
+    !['true', 'false'].includes(runningValue)
+  ) {
     return { ok: false, code: 'container_memory_unreadable', message: '无法读取容器内存上限' }
   }
-  return { ok: true, memory: formatted, bytes: Number(String(r.stdout || '').trim()) }
+  return { ok: true, memory: formatted, bytes: Number(memoryValue), swapBytes, running: runningValue === 'true' }
 }
 
 export function validateDockerMemoryRaise(vm, requestedMemory, routing) {
@@ -106,6 +121,11 @@ export function raiseDockerSlotMemory(projectRoot, vm, requestedMemory, { routin
 
   const mem = validated.memory
   const name = containerName(vm.id)
+  const before = inspectDockerContainerMemory(vm, execImpl)
+  if (!before.ok) return before
+  if (!before.running) {
+    return { ok: false, code: 'container_not_running', message: '容器未运行，无法验证在线扩容' }
+  }
   const update = dockerExec(vm, ['docker', 'update', '--memory', mem, '--memory-swap', mem, name], execImpl, 15_000)
   if (!update.ok) {
     const inspected = inspectDockerContainerMemory(vm, execImpl)
@@ -127,11 +147,22 @@ export function raiseDockerSlotMemory(projectRoot, vm, requestedMemory, { routin
       requested: mem,
     }
   }
-  if (memoryMiB(inspected.memory) < memoryMiB(mem)) {
+  const requestedBytes = memoryMiB(mem) * 1024 ** 2
+  if (inspected.bytes !== requestedBytes || inspected.swapBytes !== requestedBytes) {
     return {
       ok: false,
       code: 'memory_diverged',
-      message: `容器内存为 ${inspected.memory}，与请求的 ${mem} 不一致，未写入配置`,
+      message: `容器内存或 swap 上限与请求的 ${mem} 不一致，未写入配置`,
+      requested: mem,
+      container_memory: inspected.memory,
+    }
+  }
+  const cgroup = dockerExec(vm, ['docker', 'exec', name, 'cat', '/sys/fs/cgroup/memory.max'], execImpl, 10_000)
+  if (!cgroup.ok || Number(String(cgroup.stdout || '').trim()) !== requestedBytes) {
+    return {
+      ok: false,
+      code: 'cgroup_memory_diverged',
+      message: '容器实际 cgroup 内存上限与请求不一致，未写入配置',
       requested: mem,
       container_memory: inspected.memory,
     }

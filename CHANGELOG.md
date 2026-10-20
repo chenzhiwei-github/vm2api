@@ -1,6 +1,16 @@
 # Changelog
 
-## 未发布
+## 1.3.201 — 2026-10-20
+
+- 消息线程 beta 在控制面按消息 id 记住 24 小时（最多 1 万条）：同模型的 `continue` 补回上一轮 beta，并保留本轮新算出的；换模型、过期或未知 id 用现算值，不失败。create 轮对支持的模型仅凭 `thread` 带上 `mid-conversation-output-config`，continue 不再回放 effort 控件也能带上该门。命中 / 未命中 / 换模型记在 `hop_meta.thread_betas`。进程重启后 pin 丢失，按未命中处理。（#621）
+- Docker 在线扩容只在容器运行中、且 `HostConfig.Memory`、`HostConfig.MemorySwap` 与容器内 cgroup `memory.max` 三者都等于请求字节时写入 `vm.machine.memory`。停着的容器在 `docker update` 前拒绝；不一致返回 502 且不改配置。校验失败不回滚已经执行的 `docker update`，容器限额可能已经是新值。cgroup v2 读到 `max` 视为不一致。（#621）
+- 官方 Claude Code 登录（`cc`）在已有授权链接之前打开槽终端，避免链接面板盖住「打开官方登录终端」。（#621）
+- 面板凭据：选择 Claude Code 官方登录时直接打开槽终端，已有 OAuth 授权链接不再挡住 CC 登录路径。（#622）
+- Responses WebSocket：入站 `response.interrupt`（Codex steer）本地中止在飞 hop 并回 `response.interrupt.accepted`；取消走既有 handleProtocol 终态记账，不再报 `unsupported Responses WebSocket message type` 或网关 `incomplete_response`。上游 interrupt 转发对齐 CPR 后置。（#616）
+- Fable `7d_oi`：reset 已过（含秒级时间戳）不再永久判 rejected；`fableWindowResetAt` / weekly split 用 `parseResetMs`；过期清理纳入 `unified['7d_oi']`，且 `elapsedExtraResetMs` 纳入 `7d_oi` 后会在窗口过期时触发 usage probe；无 reset 时仍按 rejected 处理。（#601）
+- OpenAI 槽：从 OAuth `id_token` 读取 `chatgpt_subscription_active_until`（含 epoch 秒/毫秒归一化为 ISO），刷新时新 token 带 claim 则覆盖到期日、不带则保留旧值；账号页只读展示「订阅到期（以凭证为准）」，缺失显示「—」。`plan_type` 缺失时用 id_token 的 `chatgpt_plan_type` 兜底展示；wham 写入的套餐类型优先。（#609）
+
+已部署机升级：更新 Node 控制面与 `web/dist` 后重启。不必更换 kernel / CLI，不必重建槽。已有 Docker 槽的内存限额不会因本次升级自动改变。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
 
 ## 1.3.200 — 2026-10-20
 

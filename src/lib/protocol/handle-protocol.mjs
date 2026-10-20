@@ -771,6 +771,7 @@ export function createHandleProtocol(deps) {
           projectRoot: cfg.paths.project,
           captureOutbound: logCtx.capture_outbound === true,
           accountGate,
+          ops: deps.codexOps || {},
           ...codexSticky,
         })
       }
@@ -788,6 +789,7 @@ export function createHandleProtocol(deps) {
         projectRoot: cfg.paths.project,
         captureOutbound: logCtx.capture_outbound === true,
         accountGate,
+        ops: deps.codexOps || {},
         ...codexSticky,
       })
     }
@@ -1556,6 +1558,7 @@ export function createHandleProtocol(deps) {
     logBag.vm_id = result?.vmId || null
     logBag.account_id = result?.accountId || null
     logBag.final_account_id = result?.accountId || null
+    if (result?.threadBetas) logBag.hop_meta = { ...logBag.hop_meta, thread_betas: result.threadBetas }
     // Zero executions is a real 0, not unknown; the VM is the last one that ran.
     logBag.attempt_count = result?.attemptCount ?? 0
     logBag.final_state = result?.finalState || result?.terminalState || null
