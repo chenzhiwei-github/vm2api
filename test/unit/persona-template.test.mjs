@@ -441,6 +441,15 @@ test('PUT routing accepts only 5m and 1h cache TTL values', () => {
   assert.match(validatePersonaRoutingPatch({ compatibility: { cache_ttl: '60m' } })[0], /5m \/ 1h/)
 })
 
+test('PUT routing accepts summarized and passthrough thinking display', () => {
+  assert.deepEqual(validatePersonaRoutingPatch({ compatibility: { thinking_display: 'summarized' } }), [])
+  assert.deepEqual(validatePersonaRoutingPatch({ compatibility: { thinking_display: 'passthrough' } }), [])
+  assert.match(
+    validatePersonaRoutingPatch({ compatibility: { thinking_display: 'omitted' } })[0],
+    /summarized \/ passthrough/,
+  )
+})
+
 test('legacy routing without persona_preset keeps the old rewrite path', () => {
   withRoutingFile({ persona_inject: 'rewrite', persona_park: false }, (file) => {
     const out = applyCrsUnofficialPersona(
