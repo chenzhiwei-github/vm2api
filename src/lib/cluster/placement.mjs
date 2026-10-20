@@ -43,11 +43,13 @@ export function vmNodeId(vm) {
 }
 
 /**
- * What a node slot can do (see vm/slot-host.mjs). Official CC init, setup-token
- * PTY, wrap repair/promote and engine switching drive host-side processes or
- * the host's .kin copy; those stay local. Codex is allowed: its kernel runs on
- * the control plane and dials vms/<id>/run/codex-kernel.sock there. The node
- * container only holds identity and the slot network, same as a local GPT slot.
+ * What a node slot advertises via slotHost.supports() (see vm/slot-host.mjs).
+ * Panel shell official login and credential SFTP sync are placement-agnostic;
+ * they use the Engine API and remote-slot-files instead of this set. Official
+ * CC bootstrap, setup-token PTY, wrap repair/promote and engine switching still
+ * need host-side .kin or local processes and stay off-node. Codex is allowed:
+ * its kernel runs on the control plane and dials vms/<id>/run/codex-kernel.sock
+ * there. The node container only holds identity and the slot network.
  */
 export const SLOT_CAPS_NODE = new Set(['codex'])
 

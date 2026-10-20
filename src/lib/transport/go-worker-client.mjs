@@ -19,6 +19,8 @@ import {
   readWorkerCredentialFile,
   REFRESH_SKEW_MS,
   writeWorkerCredentialFile,
+  ensureOfficialCredentialLink,
+  authLoginBlocksRefresh,
 } from '../oauth/oauth-credentials.mjs'
 import { isApiKeyMode } from '../oauth/credential-mode.mjs'
 import { runSlotOauth } from './slot-oauth.mjs'
@@ -988,6 +990,7 @@ export async function ensureWorkerCredential(exec, { force = false } = {}) {
     }
   }
 
+  if (exec?.homeDir) ensureOfficialCredentialLink(exec.homeDir)
   const credential = readWorkerCredentialFile(exec.homeDir)
   if (!credential) {
     return {
@@ -1000,6 +1003,15 @@ export async function ensureWorkerCredential(exec, { force = false } = {}) {
 
   const now = Date.now()
   const apiKey = isApiKeyMode(credential.type || credential.mode)
+  if (!apiKey && authLoginBlocksRefresh(exec?.homeDir, now)) {
+    return {
+      ok: true,
+      status: 200,
+      refreshed: false,
+      refresh_class: 'login_in_progress',
+      credential: credentialSummary(credential, now),
+    }
+  }
   const alreadyFresh = apiKey || (!force && !needsRefresh(credential.expires_at, now, REFRESH_SKEW_MS))
   if (alreadyFresh) {
     return {
@@ -1014,6 +1026,17 @@ export async function ensureWorkerCredential(exec, { force = false } = {}) {
   const snapshotRefresh = String(credential.refresh_token || '')
   const lockKey = String(exec.homeDir || exec.vm?.id || 'credential')
   return withCredentialRefreshLock(lockKey, async () => {
+    if (exec?.homeDir) ensureOfficialCredentialLink(exec.homeDir)
+    if (!apiKey && authLoginBlocksRefresh(exec?.homeDir)) {
+      const held = readWorkerCredentialFile(exec.homeDir) || credential
+      return {
+        ok: true,
+        status: 200,
+        refreshed: false,
+        refresh_class: 'login_in_progress',
+        credential: credentialSummary(held, Date.now()),
+      }
+    }
     const live = readWorkerCredentialFile(exec.homeDir) || credential
     const liveRefresh = String(live?.refresh_token || '')
     if (snapshotRefresh && liveRefresh && snapshotRefresh !== liveRefresh) {

@@ -6,6 +6,7 @@ import path from 'node:path'
 import {
   formatDockerMemoryBytes,
   inspectDockerContainerMemory,
+  parseCgroupMemoryLimit,
   raiseDockerSlotMemory,
   validateDockerMemoryRaise,
 } from '../../src/lib/vm/docker-slot-memory.mjs'
@@ -13,6 +14,13 @@ import {
 test('formatDockerMemoryBytes normalizes docker byte limits', () => {
   assert.equal(formatDockerMemoryBytes(536870912), '512m')
   assert.equal(formatDockerMemoryBytes(1073741824), '1g')
+})
+
+test('parseCgroupMemoryLimit handles v2 max and v1 unlimited sentinel', () => {
+  assert.deepEqual(parseCgroupMemoryLimit('max'), { kind: 'unlimited' })
+  assert.deepEqual(parseCgroupMemoryLimit('9223372036854771712'), { kind: 'unlimited' })
+  assert.deepEqual(parseCgroupMemoryLimit(String(1024 ** 3)), { kind: 'limited', bytes: 1024 ** 3 })
+  assert.deepEqual(parseCgroupMemoryLimit(''), { kind: 'unreadable' })
 })
 
 test('validateDockerMemoryRaise rejects kvm and invalid or non-increasing memory', () => {
@@ -128,18 +136,28 @@ test('raiseDockerSlotMemory refuses a mismatched swap limit without persisting',
     tmpVmRecord(root, 'vm-04')
     const vm = { id: 'vm-04', runtime_type: 'docker', machine: { memory: '512m' } }
     let updated = false
+    let rollback = false
     const execImpl = (argv) => {
       if (argv.includes('update')) {
-        updated = true
+        if (argv.includes('512m') && updated) {
+          rollback = true
+          updated = false
+        } else {
+          updated = true
+        }
         return { ok: true, stdout: '' }
       }
       if (argv.includes('inspect')) {
         const memory = updated ? 1024 ** 3 : 512 * 1024 ** 2
-        return { ok: true, stdout: `${memory} ${512 * 1024 ** 2} true` }
+        const swap = updated ? 512 * 1024 ** 2 : 512 * 1024 ** 2
+        return { ok: true, stdout: `${memory} ${swap} true` }
       }
       return { ok: false, stderr: 'unexpected' }
     }
-    assert.equal(raiseDockerSlotMemory(root, vm, '1g', { execImpl }).code, 'memory_diverged')
+    const raised = raiseDockerSlotMemory(root, vm, '1g', { execImpl })
+    assert.equal(raised.code, 'memory_diverged')
+    assert.equal(raised.rollback_succeeded, true)
+    assert.equal(rollback, true)
     assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'vms', 'vm-04.json'), 'utf8')).machine.memory, '512m')
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
@@ -152,9 +170,15 @@ test('raiseDockerSlotMemory refuses a mismatched cgroup limit without persisting
     tmpVmRecord(root, 'vm-05')
     const vm = { id: 'vm-05', runtime_type: 'docker', machine: { memory: '512m' } }
     let updated = false
+    let rollback = false
     const execImpl = (argv) => {
       if (argv.includes('update')) {
-        updated = true
+        if (argv.includes('512m') && updated) {
+          rollback = true
+          updated = false
+        } else {
+          updated = true
+        }
         return { ok: true, stdout: '' }
       }
       if (argv.includes('inspect')) {
@@ -164,8 +188,65 @@ test('raiseDockerSlotMemory refuses a mismatched cgroup limit without persisting
       if (argv.includes('exec')) return { ok: true, stdout: String(512 * 1024 ** 2) }
       return { ok: false, stderr: 'unexpected' }
     }
-    assert.equal(raiseDockerSlotMemory(root, vm, '1g', { execImpl }).code, 'cgroup_memory_diverged')
+    const raised = raiseDockerSlotMemory(root, vm, '1g', { execImpl })
+    assert.equal(raised.code, 'cgroup_memory_diverged')
+    assert.equal(raised.rollback_succeeded, true)
+    assert.equal(rollback, true)
     assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'vms', 'vm-05.json'), 'utf8')).machine.memory, '512m')
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('raiseDockerSlotMemory accepts cgroup v1 limit when memory.max is missing', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-mem-cgroup-v1-'))
+  try {
+    const id = 'vm-07'
+    tmpVmRecord(root, id)
+    const vm = { id, runtime_type: 'docker', machine: { memory: '512m' } }
+    let updated = false
+    const execImpl = (argv) => {
+      if (argv.includes('update')) {
+        updated = true
+        return { ok: true, stdout: '' }
+      }
+      if (argv.includes('inspect')) {
+        const bytes = updated ? 1024 ** 3 : 512 * 1024 ** 2
+        return { ok: true, stdout: `${bytes} ${bytes} true` }
+      }
+      if (argv.join(' ').includes('memory.max')) return { ok: false, stderr: 'No such file' }
+      if (argv.join(' ').includes('limit_in_bytes')) return { ok: true, stdout: String(1024 ** 3) }
+      return { ok: false, stderr: 'unexpected' }
+    }
+    const raised = raiseDockerSlotMemory(root, vm, '1g', { execImpl })
+    assert.equal(raised.ok, true)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'vms', `${id}.json`), 'utf8')).machine.memory, '1g')
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('raiseDockerSlotMemory accepts memory.max=max when HostConfig already matches', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-mem-cgroup-max-'))
+  try {
+    const id = 'vm-08'
+    tmpVmRecord(root, id)
+    const vm = { id, runtime_type: 'docker', machine: { memory: '512m' } }
+    let updated = false
+    const execImpl = (argv) => {
+      if (argv.includes('update')) {
+        updated = true
+        return { ok: true, stdout: '' }
+      }
+      if (argv.includes('inspect')) {
+        const bytes = updated ? 1024 ** 3 : 512 * 1024 ** 2
+        return { ok: true, stdout: `${bytes} ${bytes} true` }
+      }
+      if (argv.includes('exec')) return { ok: true, stdout: 'max' }
+      return { ok: false, stderr: 'unexpected' }
+    }
+    const raised = raiseDockerSlotMemory(root, vm, '1g', { execImpl })
+    assert.equal(raised.ok, true)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

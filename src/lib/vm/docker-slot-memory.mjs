@@ -55,6 +55,68 @@ function dockerExec(vm, argv, execImpl, timeout) {
   return execImpl(argv, { timeout, ...(env ? { env } : {}) })
 }
 
+/** cgroup v1「无上限」哨兵（与 Linux PAGE_COUNTER_MAX 同量级） */
+const CGROUP_V1_UNLIMITED = 9223372036854771712
+
+export function parseCgroupMemoryLimit(raw) {
+  const text = String(raw ?? '').trim()
+  if (!text) return { kind: 'unreadable' }
+  if (text.toLowerCase() === 'max') return { kind: 'unlimited' }
+  if (/^\d+$/.test(text)) {
+    try {
+      const big = BigInt(text)
+      if (big >= BigInt(CGROUP_V1_UNLIMITED) - 1024n) return { kind: 'unlimited' }
+      const bytes = Number(big)
+      if (!Number.isSafeInteger(bytes) || bytes < 0) return { kind: 'unreadable' }
+      return { kind: 'limited', bytes }
+    } catch {
+      return { kind: 'unreadable' }
+    }
+  }
+  return { kind: 'unreadable' }
+}
+
+export function readContainerCgroupMemoryLimit(vm, containerId, execImpl) {
+  const v2 = dockerExec(vm, ['docker', 'exec', containerId, 'cat', '/sys/fs/cgroup/memory.max'], execImpl, 10_000)
+  if (v2.ok) {
+    const parsed = parseCgroupMemoryLimit(v2.stdout)
+    if (parsed.kind !== 'unreadable') return parsed
+  }
+  const v1 = dockerExec(
+    vm,
+    ['docker', 'exec', containerId, 'cat', '/sys/fs/cgroup/memory/memory.limit_in_bytes'],
+    execImpl,
+    10_000,
+  )
+  if (v1.ok) {
+    const parsed = parseCgroupMemoryLimit(v1.stdout)
+    if (parsed.kind !== 'unreadable') return parsed
+  }
+  return { kind: 'unreadable' }
+}
+
+function rollbackDockerMemory(vm, before, execImpl) {
+  const mem = before.memory
+  const swap =
+    before.swapBytes > 0 && before.swapBytes !== before.bytes ? formatDockerMemoryBytes(before.swapBytes) || mem : mem
+  const name = containerName(vm.id)
+  const r = dockerExec(vm, ['docker', 'update', '--memory', mem, '--memory-swap', swap, name], execImpl, 15_000)
+  return r.ok
+}
+
+function failAfterDockerUpdate(vm, before, execImpl, failure) {
+  const rollbackOk = rollbackDockerMemory(vm, before, execImpl)
+  const rollbackNote = rollbackOk
+    ? '已用 docker update 回滚至扩容前限额，vm 配置未写入。'
+    : '自动回滚 docker update 失败，请手动核对容器 HostConfig 与面板配置是否一致。'
+  return {
+    ...failure,
+    message: `${failure.message} ${rollbackNote}`.trim(),
+    config_unchanged: true,
+    rollback_succeeded: rollbackOk,
+  }
+}
+
 export function inspectDockerContainerMemory(vm, execImpl = defaultExec) {
   const name = containerName(vm?.id)
   const r = dockerExec(
@@ -140,32 +202,32 @@ export function raiseDockerSlotMemory(projectRoot, vm, requestedMemory, { routin
 
   const inspected = inspectDockerContainerMemory(vm, execImpl)
   if (!inspected.ok) {
-    return {
+    return failAfterDockerUpdate(vm, before, execImpl, {
       ok: false,
       code: inspected.code,
       message: inspected.message,
       requested: mem,
-    }
+    })
   }
   const requestedBytes = memoryMiB(mem) * 1024 ** 2
   if (inspected.bytes !== requestedBytes || inspected.swapBytes !== requestedBytes) {
-    return {
+    return failAfterDockerUpdate(vm, before, execImpl, {
       ok: false,
       code: 'memory_diverged',
       message: `容器内存或 swap 上限与请求的 ${mem} 不一致，未写入配置`,
       requested: mem,
       container_memory: inspected.memory,
-    }
+    })
   }
-  const cgroup = dockerExec(vm, ['docker', 'exec', name, 'cat', '/sys/fs/cgroup/memory.max'], execImpl, 10_000)
-  if (!cgroup.ok || Number(String(cgroup.stdout || '').trim()) !== requestedBytes) {
-    return {
+  const cgroup = readContainerCgroupMemoryLimit(vm, name, execImpl)
+  if (cgroup.kind === 'limited' && cgroup.bytes !== requestedBytes) {
+    return failAfterDockerUpdate(vm, before, execImpl, {
       ok: false,
       code: 'cgroup_memory_diverged',
       message: '容器实际 cgroup 内存上限与请求不一致，未写入配置',
       requested: mem,
       container_memory: inspected.memory,
-    }
+    })
   }
 
   const saved = patchVmRecord(projectRoot, vm.id, (record) => {
@@ -178,13 +240,13 @@ export function raiseDockerSlotMemory(projectRoot, vm, requestedMemory, { routin
     return next
   })
   if (!saved) {
-    return {
+    return failAfterDockerUpdate(vm, before, execImpl, {
       ok: false,
       code: 'vm_not_found',
       message: 'vm not found',
       requested: mem,
       container_memory: inspected.memory,
-    }
+    })
   }
 
   return {
