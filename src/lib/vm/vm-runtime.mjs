@@ -356,7 +356,7 @@ export function isSlotProxyDesynced(vm, projectRoot) {
 }
 
 /** Write worker.json.telemetry from seed_policy. Does not bounce the process. */
-export function syncWorkerTelemetry(vm, projectRoot) {
+export function syncWorkerTelemetry(vm, projectRoot, routing = null) {
   if (!vm?.id || !projectRoot) return { wrote: false }
   const paths = workerPaths(projectRoot, vm.id)
   if (!fs.existsSync(paths.config)) return { wrote: false }
@@ -367,7 +367,7 @@ export function syncWorkerTelemetry(vm, projectRoot) {
     return { wrote: false }
   }
   if (!doc || typeof doc !== 'object') return { wrote: false }
-  doc.telemetry = buildWorkerTelemetry(vm, projectRoot)
+  doc.telemetry = buildWorkerTelemetry(vm, projectRoot, routing)
   replaceSlotOwnedFile(paths.config, JSON.stringify(doc, null, 2) + '\n', vm)
   return { wrote: true, enabled: doc.telemetry.enabled === true }
 }

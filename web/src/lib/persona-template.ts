@@ -113,7 +113,6 @@ export const PERSONA_TEMPLATE_VARS: [string, string][] = [
 export const OVERLAY_TEMPLATE_VARS: [string, string][] = [
   ['overlay_body', 'body 块拼接结果，只能出现在 wrapper 块'],
   ['standing', 'persona_standing 常驻约束'],
-  ['rules', '命中末轮 user 的 persona_rules append 拼接'],
 ]
 
 const PERSONA_VAR_NAMES = PERSONA_TEMPLATE_VARS.map(([name]) => name)
@@ -270,13 +269,6 @@ export const DEFAULT_OVERLAY_TEMPLATES: Record<
       drop_if_empty: true,
       text: '{{standing}}',
     },
-    {
-      id: 'rules',
-      note: '命中末轮 user 的 persona_rules append',
-      type: 'body',
-      drop_if_empty: true,
-      text: '{{rules}}',
-    },
   ],
   minimal: [
     {
@@ -291,13 +283,6 @@ export const DEFAULT_OVERLAY_TEMPLATES: Record<
       type: 'body',
       drop_if_empty: true,
       text: '{{standing}}',
-    },
-    {
-      id: 'rules',
-      note: '命中规则 append',
-      type: 'body',
-      drop_if_empty: true,
-      text: '{{rules}}',
     },
   ],
   custom: [],

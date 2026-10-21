@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.207 — 2026-10-21
+
+- 设置导航里 OpenAI 只留一个入口（调度组）。去掉「白名单」页和 `persona_rules` 整套：网关不再按末轮 user 正则追加防泄漏 / 身份 / 无工具提示，park 与 overlay 只带 `persona_standing`，overlay 模板去掉 `{{rules}}`。保存协议时 `routing.json` 里的 `persona_rules`、`persona_leak_append` 一并删除。
+- 设置 → 遥测重做：槽位分布条、每槽实时旁路状态（运行中的槽每 20 秒探测）、按槽开关，旁路重启失败单独提示；展开可看上传时间线（批次、GrowthBook、失败）和脱敏原始记录。「上传中」要求 `worker.json` 遥测生效且进程在跑；种子开但没有官方身份显示「开 · 无官方身份」，集群槽注明。全开 / 全关先确认并逐槽显示进度，GPT 槽不参与批量写入。附播种写入键对照、上传链路说明，以及「换票后同步遥测」「Codex analytics」的当前值和跳转。
+- 遥测上传间隔可调：`routing.telemetry.upload_interval_seconds`，整分钟、1 分钟到 24 小时，默认 10 分钟（原固定 10 秒）。设置 → 遥测可按分钟或小时设置，保存后重写各 Claude 槽 `worker.json`，旁路热重载，不重启；集群槽改为排队推送到节点。GrowthBook 仍是 6 小时，10 分钟会话窗口不变。
+- 遥测旁路读官方身份时不再要求 `machineID`。当前 CLI 初装只写 `userID`，这类槽原先一直卡在 `waiting_official_identity`，不上传也没有记录。`.claude.json` 都缺失时，改从槽记录的 `fingerprint.official_user_id` 取身份。GPT 槽不写 Claude 遥测身份。
+
+已部署机升级：更新 Node 控制面、`web/dist` 与 `bin/kin-worker`，重启一次 Node。无迁移、无新依赖，不必 `wrap-cli/sync`。上传间隔要新的 `kin-worker` 才生效：本机槽需重启遥测旁路（fleet `action=telemetry`）；集群槽在下次槽位启动、重载或出口重建时推送新的 `kin-worker`。旧旁路忽略该设置，仍每 10 秒上传。卡在 `waiting_official_identity` 的本机槽，播种或保存一次种子后 `worker.json` 会写入身份。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
+
 ## 1.3.206 — 2026-10-21
 
 - 官方登录终端把授权链接显式提取出来，跨终端帧也不会漏。复制链接、打开授权页和回填授权码与普通 OAuth 相同。

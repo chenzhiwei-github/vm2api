@@ -174,6 +174,7 @@ import {
   SESSION_SLOT_MIN,
   validateInferenceRoutingPatch,
 } from '../vm/slot-engine.mjs'
+import { validateTelemetryRoutingPatch } from '../vm/worker-telemetry.mjs'
 import { makeError, ErrorType, ErrorCode } from '../core/errors.mjs'
 import * as panel from './panel-api.mjs'
 import { GATEWAY_CAPABILITIES } from '../vm/execution-context.mjs'
@@ -5258,7 +5259,11 @@ export function createPanelHandler(ctx) {
             })
           }
         }
-        const personaProblems = [...panel.validatePersonaRoutingPatch(body), ...validateInferenceRoutingPatch(body)]
+        const personaProblems = [
+          ...panel.validatePersonaRoutingPatch(body),
+          ...validateInferenceRoutingPatch(body),
+          ...validateTelemetryRoutingPatch(body),
+        ]
         if (personaProblems.length) {
           return json(res, 400, {
             ok: false,
