@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.3.206 — 2026-10-21
+
+- 官方登录终端把授权链接显式提取出来，跨终端帧也不会漏。复制链接、打开授权页和回填授权码与普通 OAuth 相同。
+- VM 页 OAuth 方式顺序为 Claude Code、授权链接、Cookie。设置里的「同步遥测」按默认关闭显示。
+
+## 1.3.205 — 2026-10-21
+
+- cli-hop 出站的缓存标记写上请求解析出的 TTL。原来只有 `{type: ephemeral}`，上游按 5 分钟过期，间隔超过 5 分钟的下一轮整段重写。默认 `1h`，显式 `5m` 保持 `5m`。
+
+## 1.3.204 — 2026-10-21
+
+- 官方 OAuth 的 Claude Code 终端启动真实 `claude`，不再执行 `claude auth login`。初次进入按两次回车拿到授权链接；按 c 经 OSC 52 复制到浏览器剪贴板，授权码粘回终端。授权写入既有 `credentials.json`，`.credentials.json` 仍是它的链接，不另存一份。
+- cli-hop 以本地最终形态覆盖 1.3.203 合入的两段样板：官方家族保留入站 system 与省略的 TTL，调用方 system 不再被收成 identity + 正文。缓存标记只打最新 user 的文本，thinking 尾不打；eager_input_streaming 和工具 cache_control 仍去掉，避免 CLI 回填省略的 TTL。
+- 缓存断点按字段差记录，不再把 structure 当成块形变化。tools 差异不挡住消息断点，嵌套计数器单独标出；截断采样里混有未采样的正文变更时，不再标成仅计数器。
+
+## 1.3.203 — 2026-10-21
+
+- 实验性 macOS 原生节点（Apple Silicon，#585）：节点连上后按 `uname -s` 记录平台（迁移 040 `cluster_nodes.platform`）；macOS 节点不用 Docker，每个槽是 SSH 用户 `gui/<uid>` 域里的两个 launchd 服务（kernel、telemetry），plist、日志、套接字都在 `~/.vm2api/vms/<id>/`，kernel.json 写节点真实路径。产物取自 `payload/darwin-arm64/`（`KIN_DARWIN_PAYLOAD_DIR`），按内容哈希上传到 `~/.vm2api/native/<digest>/`；kin-kernel / cli-node / cc-node 需另行提供 darwin/arm64 构建。预检检查 arm64、图形登录、目录、套接字长度、产物与休眠；看门狗与 supervisor 经 `launchctl` 观察、重启、补加载。首版只支持 Claude 槽与节点本机出口，终端、槽内登录、直连通道、内存在线调整返回 `native_node_unsupported`。见 `docs/MACOS_NODE.md`。
+- 集群节点 SSH 断开（离线、休眠、重启）期间，调度器跳过该节点上的槽位（`node_offline`），重连后自动恢复。
+- 远端读文件在 BSD 工具链（macOS 节点）上改为先拒绝符号链接与非普通文件再读取；GNU 节点仍用 `dd iflag=nofollow`。
+- 面板 Claude 用量：`utilization_*` 超过 1（如 header 1.04）按 ratio×100 显示，不再误成约 1%；Codex `used_percent` 路径不变。（#625，#631）
+- 自动/手动备份流水线改到 worker 线程执行（VACUUM INTO + tar），避免主线程长时间阻塞网关导致 Cloudflare 524。（#638，#639）
+- cli-hop 出站收成官方两段 system（identity + 调用方正文，ephemeral 无 TTL）、缓存标记打最新 user、去掉 eager_input_streaming/工具 cache_control/temperature/context_management，thinking display 默认 summarized 等。（#641）1.3.204 起官方家族改回保留入站 system。
+- 设置 → 遥测新增日志总开关和保存时间（默认 24 小时，1–168）。这是各槽上传日志的唯一启动源：关闭不写、不显示；打开后槽位运维页直接显示该槽保留窗口内已有记录。sidecar 按同一窗口裁 `telemetry-upload.log`。
+- 槽内 cli-node 进入 native loop 前丢掉 `settings.json` 里安全名单以外的 env（如 `LD_PRELOAD`）。cli-node 2.1.296 UPX，sha256 `b5054cb8494670354e61f3e0a0f7b2c3b768832c841140a4e22407fec24ab009`。
+- 授权页默认 OAuth。顺序为 Claude Code、Cookie、授权链接；Setup Token 为授权链接、Cookie。去掉 Console 导入。
+- 入站 device 迁移改为 `041_usage_logs_inbound_device`，避开 macOS 节点占用的 040。
+
 ## 1.3.202 — 2026-10-20
 
 - 官方凭证只保留一份 refresh token：`.credentials.json` 里较新的授权先并入宿主 `credentials.json`，再把官方文件名链回去。进行中的槽内 `claude auth login` 不再拿旧 refresh token 去换票，避免新授权被判 revoked。

@@ -81,10 +81,19 @@ export const PERSONA_TEMPLATE_VARS: [string, string][] = [
     'identity',
     "官方身份句 You are a Claude agent, built on Anthropic's Claude Agent SDK.",
   ],
-  ['identity_cli', "交互 CLI 身份句 You are Claude Code, Anthropic's official CLI for Claude."],
+  [
+    'identity_cli',
+    "交互 CLI 身份句 You are Claude Code, Anthropic's official CLI for Claude.",
+  ],
   ['identity_compact', '0注入短身份句 You are Anthropic Claude Agent SDK.'],
-  ['reporting', '官方 # Reporting outcomes 整段。cli-node 只在计费和身份都在时把它切成独立段'],
-  ['dynamic_boundary', '官方动态边界标记。cli-node 用它把前面的静态段标成 global，后面的标成 org，标记本身不出站'],
+  [
+    'reporting',
+    '官方 # Reporting outcomes 整段。cli-node 只在计费和身份都在时把它切成独立段',
+  ],
+  [
+    'dynamic_boundary',
+    '官方动态边界标记。cli-node 用它把前面的静态段标成 global，后面的标成 org，标记本身不出站',
+  ],
   ['agent_expansion', '短 agent 扩写段'],
   ['agent_official', '官方 agent 提示词全文'],
   ['agent_standing', 'agent prompt 常驻约束（按档开关，非空时以换行结尾）'],
