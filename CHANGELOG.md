@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.208 — 2026-10-21
+
+- 回退 1.3.208 的请求体重组与缓存断点改动，保持 1.3.207 的 thinking、system 和消息结构；仅在 cli-node 最终 hop 补回缺失的 `x-anthropic-billing-header`。
+
 ## 1.3.207 — 2026-10-21
 
 - 设置导航里 OpenAI 只留一个入口（调度组）。去掉「白名单」页和 `persona_rules` 整套：网关不再按末轮 user 正则追加防泄漏 / 身份 / 无工具提示，park 与 overlay 只带 `persona_standing`，overlay 模板去掉 `{{rules}}`。保存协议时 `routing.json` 里的 `persona_rules`、`persona_leak_append` 一并删除。
