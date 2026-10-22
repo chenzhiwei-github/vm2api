@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.209 — 2026-10-22
+
+- 遥测 `event_data.env` 不再附带客户机硬件（`cpu_model`、`cpu_cores`、`memory_bytes`、`root_disk`、`mac`、`dmi_*` 共 11 项），与官方 Claude Code 2.1.296 的 env 字段一致；`worker.json` 的 identity 也不再写这些键。新 `kin-worker` 发送前会剔除旧 `worker.json` 里残留的同名键。槽位运维页「物理特征」照旧读取和展示。（#646）
+- 面板窄屏修复：设置 → 关于的 changelog 里长键名、路径可任意处折行，手机上不再把整页撑宽；设置页左侧分栏导航改按内容区宽度切换（`@2xl/content`），平板竖屏（768）不再把正文挤到约 270px 导致协议 / 遥测 / 通知页横向溢出；Anthropic 控制台地址行同样按内容区宽度横排，「测试 / 保存 / 删除」收进同一格，宽屏下「删除」不再单独掉到下一行。（#662）
+- debug 请求日志的 `outbound_body` / `outbound_headers` 改为在传输层 `finalizeWorkerPayload` 之后、真正 POST 给槽位 worker 的 envelope 上取值；从未发出则为 null。不改出站内容、不改推理路径。（#669）
+
+已部署机升级：更新 Node 控制面、`web/dist` 与 `bin/kin-worker`，重启一次 Node。无迁移、无新依赖。`worker.json` 重写（播种、换票、fleet `action=telemetry`）或换上新 `kin-worker`，两者任一发生后就不再上传硬件键；集群槽在下次启动、重载或出口重建时推送。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
+
 ## 1.3.208 — 2026-10-21
 
 - 回退 1.3.208 的请求体重组与缓存断点改动，保持 1.3.207 的 thinking、system 和消息结构；仅在 cli-node 最终 hop 补回缺失的 `x-anthropic-billing-header`。

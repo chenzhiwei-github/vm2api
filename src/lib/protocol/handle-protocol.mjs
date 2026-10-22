@@ -434,6 +434,7 @@ export function createHandleProtocol(deps) {
     requestContext = null,
     routing = {},
     noGoFallback = false,
+    onEnvelope = null,
   }) {
     const assembler = createClaudeMessageAssembler()
     const workerResult = await dispatchStreamInference({
@@ -453,6 +454,7 @@ export function createHandleProtocol(deps) {
       slotWaitMs: candidate.slotWaitMs,
       noGoFallback,
       ensureCredential: (exec) => ensureWorkerCredential(exec),
+      onEnvelope,
       onEvent: async (line) => {
         if (/response_headers/.test(String(line))) return
         applyClaudeSSELineToMessage(restoreToolNamesInSSELine(line, toolNames), assembler)
@@ -1208,6 +1210,13 @@ export function createHandleProtocol(deps) {
       const where = formatCacheBreak(prefix)
       console.warn(`[cache-prefix] request ${logCtx.request_id} turn ${prefix.turn} broke at ${where}`)
     }
+    // 出站日志记录的是传输层最终 POST 给槽位 worker 的 envelope（billing、betas、cch
+    // 都已补齐），不是 applyAttempt 里的中间对象。每次真正发出都会覆盖，所以日志里
+    // 留下的是本请求最后一次发出的内容；从未发出则保持 null。
+    const noteOutboundEnvelope = (envelope) => {
+      if (logCtx.capture_outbound) logBag.outbound_body = envelope?.body ?? null
+      logBag.outbound_headers = envelope?.headers ? redactHeaders(envelope.headers) : null
+    }
     let result
     try {
       result = await getFailoverRunner().run({
@@ -1363,7 +1372,6 @@ export function createHandleProtocol(deps) {
             // Native wire may mix TTLs or leave caller TTL absent. The menu is
             // not an accounting authority; retain the upstream 5m/1h split.
             cacheTtl = null
-            if (logCtx.capture_outbound) logBag.outbound_body = hopBody
 
             if (!panelRewrite) personaHideTokens = 0
             logBag.inference_engine = resolveInferenceEngine(selected.vm, routingNow)
@@ -1444,8 +1452,6 @@ export function createHandleProtocol(deps) {
             authScheme: isApiKeyMode(credMode) ? 'apikey' : 'oauth',
             want1m,
           })
-          if (logCtx.capture_outbound) logBag.outbound_body = prepared.body
-          logBag.outbound_headers = redactHeaders(prepared.headers || {})
           logBag.outbound_summary = summarizeBody(prepared.body)
           logBag.cache_continuity = describeCacheContinuity({
             inbound,
@@ -1479,6 +1485,7 @@ export function createHandleProtocol(deps) {
               want1m,
               routing: getRouting(),
               noGoFallback: !!pinVmId,
+              onEnvelope: noteOutboundEnvelope,
             })
           }
           let state
@@ -1525,6 +1532,7 @@ export function createHandleProtocol(deps) {
               slotWaitMs: candidate.slotWaitMs,
               noGoFallback: !!pinVmId,
               ensureCredential: (exec) => ensureWorkerCredential(exec),
+              onEnvelope: noteOutboundEnvelope,
               onCommit: () => {
                 if (protocol === 'anthropic.messages' && !res.headersSent) writeSSEHeaders(res)
                 onCommit()

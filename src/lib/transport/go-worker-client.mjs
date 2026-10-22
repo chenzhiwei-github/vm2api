@@ -506,6 +506,17 @@ function workerEnvelope({
   return { envelope, thread: finalized.thread }
 }
 
+/**
+ * 把这一跳真正 POST 给槽位 worker 的 envelope 交给调用方（请求日志据此记录出站 body / headers）。
+ * 只是旁路观察：回调抛错也不能影响这一跳。
+ */
+function reportEnvelope(onEnvelope, envelope) {
+  if (typeof onEnvelope !== 'function') return
+  try {
+    onEnvelope(envelope)
+  } catch {}
+}
+
 function mockScenario(exec) {
   try {
     const configured = JSON.parse(process.env.KIN_MOCK_ACCOUNT_SCENARIOS || '{}')
@@ -530,6 +541,7 @@ export async function callGoWorker({
   requestPath = '/internal/v1/messages',
   envelope = null,
   cliHop = false,
+  onEnvelope = null,
 } = {}) {
   if (isCrsMock()) {
     const { body: outboundBody, headers } = finalizeWorkerPayload({
@@ -542,6 +554,7 @@ export async function callGoWorker({
       cliHop,
       requestContext,
     })
+    reportEnvelope(onEnvelope, { body: outboundBody, headers })
     writeCrsTrace({ body: outboundBody, headers, stream: false })
     const mock = mockCrsPayload({ scenario: mockScenario(exec) })
     return {
@@ -571,6 +584,7 @@ export async function callGoWorker({
           cliHop,
           requestContext,
         })
+    reportEnvelope(onEnvelope, prepared.envelope)
     const response = await workerRequest(exec, {
       method: 'POST',
       requestPath,
@@ -637,6 +651,7 @@ export async function streamGoWorker({
   requestPath = '/internal/v1/messages',
   envelope = null,
   cliHop = false,
+  onEnvelope = null,
 } = {}) {
   if (isCrsMock()) {
     const { body: outboundBody, headers } = finalizeWorkerPayload({
@@ -649,6 +664,7 @@ export async function streamGoWorker({
       cliHop,
       requestContext,
     })
+    reportEnvelope(onEnvelope, { body: outboundBody, headers })
     writeCrsTrace({ body: outboundBody, headers, stream: true })
     const scenario = mockScenario(exec)
     const mockStartedAt = Date.now()
@@ -741,6 +757,7 @@ export async function streamGoWorker({
           cliHop,
           requestContext,
         })
+    reportEnvelope(onEnvelope, prepared.envelope)
     const response = await workerRequest(exec, {
       method: 'POST',
       requestPath,
