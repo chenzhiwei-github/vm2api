@@ -2,6 +2,37 @@
 
 ## 未发布
 
+## 1.3.219 — 2026-10-23
+
+- `kin-guest-exec`：修正 `if ! run_ssh` 在 POSIX 下吞掉真实退出码的问题；来宾非零退出、ssh 255、timeout 124 不再误报为 0，控制面不再把来宾崩溃误判为 `worker_output_invalid`。（#680）
+- **KVM 运行器**：需同步重建/部署 `docker/kin-kvm` 镜像（或等价方式更新 runner 内 `kin-guest-exec` 脚本）后，线上槽位才会生效。
+
+已部署机升级：须重建并同步部署 **kin-kvm** 镜像（或等价更新 runner 内 `kin-guest-exec`）；**仅更新 Node 控制面与 `web/dist` 不够**。更新后重启相关服务。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
+
+## 1.3.218 — 2026-10-23
+
+- 版本号对齐线上。官方 Claude Code / Codex 透传（原 #674、#676）已从 1.3.212 起的历史中移除：透传上线后缓存读命中锁在 system+tools 前缀（约 39.7K），messages 每轮新建缓存。cli-hop 重写与 kernel persona 恢复 1.3.209 行为。
+- cli-hop 出站 message 缓存断点恢复为两个：最后一条 user 与上一条 user（4 条消息起）。只打尾部一个点时，上一轮写入接不上就只能靠上游 20 位置回溯，越界后读命中锁在 system+tools 前缀（约 39.7K），messages 每轮整段重写。system 两点不变，总数 4 点。
+
+已部署机升级：更新 Node 控制面与 `web/dist` 后重启一次。不必 `wrap-cli/sync`、不必 `fetch:payload`、不必重建槽。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
+
+## 1.3.217 — 2026-10-23
+
+- 新增 `POST /v1/images/generations`、`/v1/images/edits`（edits 支持 multipart）：经槽位直连 Codex Images 接口，与 `/v1/alpha/search` 同一做法，不经内核；Free 槽不接生图，`x-codex-image-turn-id` 固定同一轮编辑的槽，槽位按密钥属主过滤。（#685）
+- 图像模型 `gpt-image-2.5-flare` / `gpt-image-2.5-sunburst` 可在面板分别启停；停用后 Images 请求与 Responses `image_generation` 工具在本地 400，启用的列入 `/v1/models`。（#685）
+- 生图单独计价：迁移 `042` 给 `usage_logs` 加 `image_*` 列，`image_cost` 计入总费用；用量拆分不自洽时整行未定价。（#685）
+- OpenAI 模型页：`codex.model_mappings` 可增删改（`codex-auto-review` 置顶，目标限已启用 GPT 对话模型，拒绝 `claude-*` 别名）；「同步 GPT」保存上下文窗口、推理与服务档位；去掉 Thinking / budget / 1M beta / cache TTL 等 Claude 专有控件。（#685）
+
+已部署机升级：更新 Node 控制面与 `web/dist` 后重启一次，启动时自动执行迁移 `042`（只加列）。无新依赖，不必 `wrap-cli/sync`、不必 `fetch:payload`、不必重建槽。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
+
+## 1.3.216 — 2026-10-22
+
+- GPT（Codex）槽调度按密钥属主收窄，与 Claude 池一致：租户密钥不再落到平台或其他租户的 GPT 槽，平台密钥也不进租户 GPT 槽。
+- API 直连（category=`api`）仅管理员：租户不能在面板创建或把密钥改为 `api`；推理入口在 api-kernel hop 拒绝租户已有 `api` 密钥（`api_backend_forbidden` / 403）。
+- 删除 VM/槽位仅管理员：租户不能删除自建槽；面板删槽按钮对租户隐藏。
+- **破坏性**：租户若仍持有 category=`api` 的密钥，调用平台 API 上游将收到 403；租户不能再自行删除槽位，需联系管理员。
+- `/v1/usage` 在 Codex 路径上读取用量窗口（与 Messages 属主解析一致）。
+
 ## 1.3.215 — 2026-10-22
 
 - `/v1/usage` 与 `/v1/messages/count_tokens` 传入 `apiKeyStore`，与 Messages 一致解析密钥属主角色；面板会话无 `apiKeyRecord` 时按会话角色收窄作用域（admin/super → 平台池，user → 仅本人 VM），避免租户 peek 平台账号用量或 admin 托管密钥误报 503。（#658，#677）
@@ -17,16 +48,11 @@
 
 ## 1.3.213 — 2026-10-22
 
-- 官方透传（`compatibility.official_cc_passthrough`、`codex.official_passthrough`）：system/instructions、messages/input、tools、cache_control、采样字段等 body 仍完全透传；outbound session 与 Codex `prompt_cache_key` 恢复 attempt/VM rebuild/mint（不再沿用入站 session 或调用方 cache key）；`metadata.user_id` 继续重绑槽位 device/account。默认开关仍关。（#676）
-
-已部署机升级：更新 Node 控制面与 `web/dist` 后重启一次。启用时在面板打开对应开关并保存投影；不必 `wrap-cli/sync`、不必 `fetch:payload`、不必重建槽。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
+- 版本号保留；原官方透传修正（#676）已从历史移除，本版无运行时变化。
 
 ## 1.3.212 — 2026-10-22
 
-- 新增官方 Codex 透传：开启 `codex.official_passthrough` 后，官方 Codex 家族 `/v1/responses` 保留 `instructions`、`input`、tools、reasoning、`prompt_cache_key`、`previous_response_id`、`conversation_id`/`session_id` 和官方 metadata，不再按 attempt 重建 `prompt_cache_key`；只清掉 API key/authorization/client_metadata。会话使用 `mode=passthrough`。OpenAI 兼容客户端的 body 归一化不变。
-- 新增官方 Claude Code 透传：开启 `compatibility.official_cc_passthrough` 后，官方家族 cli-hop 保留调用方 system/tools/messages、cache_control 位置与 TTL、temperature、context_management、tool_choice 和 thinking，只重绑槽位 `metadata.user_id`，不再注入 `official_full` 完整 prompt、不重打 1h 断点、不按 attempt 重 mint session。内核 persona 投影为 `zero`，避免二次注入。非官方客户端仍走原 persona/rewrite。（#674）
-
-已部署机升级：更新 Node 控制面与 `web/dist` 后重启一次。启用时在面板打开对应开关并保存投影；不必 `wrap-cli/sync`、不必 `fetch:payload`、不必重建槽。不要覆盖 `routing.json`、`vms/`、`data/`、`.env`。
+- 版本号保留；原官方透传（#674）已从历史移除，本版无运行时变化。
 
 ## 1.3.211 — 2026-10-22
 
