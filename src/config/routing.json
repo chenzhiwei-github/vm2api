@@ -58,10 +58,10 @@
     }
   },
   "logging": {
-    "mode": "debug",
+    "mode": "normal",
     "retain_days": 7,
-    "debug_retain_days": 3,
-    "max_mb": 2048
+    "debug_retain_days": 1,
+    "max_mb": 256
   },
   "pool": {
     "strategy": "balanced",
